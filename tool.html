@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Type Chaos Tool v2</title>
+<style>
+  :root {
+    --bg: #e8392a;
+    --fg: #111;
+    --panel: #1a1a1a;
+    --pt: #f0f0f0;
+    --accent: #e8392a;
+    --border: #2e2e2e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: system-ui, sans-serif;
+    background: #111;
+    color: var(--pt);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── TOOLBAR ── */
+  #toolbar {
+    background: #0d0d0d;
+    border-bottom: 1px solid var(--border);
+    padding: 7px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  #toolbar h1 { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: #666; margin-right: auto; }
+
+  .btn {
+    background: #222; border: 1px solid #3a3a3a; border-radius: 3px;
+    color: #bbb; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    padding: 5px 10px; cursor: pointer; transition: background .1s, color .1s;
+  }
+  .btn:hover { background: #2e2e2e; color: #fff; }
+  .btn.red { border-color: var(--accent); color: var(--accent); }
+  .btn.red:hover { background: var(--accent); color: #fff; }
+
+  .bg-switcher { display: flex; gap: 5px; align-items: center; }
+  .bg-swatch {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid #444; cursor: pointer;
+  }
+  .bg-swatch.active, .bg-swatch:hover { border-color: #fff; }
+
+  #font-load-btn {
+    background: #1e1e1e; border: 1px dashed #555; border-radius: 3px;
+    color: #aaa; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    padding: 5px 10px; cursor: pointer; transition: border-color .2s, color .2s;
+  }
+  #font-load-btn:hover { border-color: var(--accent); color: #fff; }
+  #font-name-display { font-size: 10px; color: #777; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .sel-info { font-size: 10px; color: #666; }
+  .sel-info span { color: var(--accent); }
+
+  /* ── STAGE ── */
+  #stage {
+    flex: 1;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; position: relative;
+  }
+  #stage.dark-bg { background: #111; }
+  #stage.white-bg { background: #fff; }
+
+  /* scene wraps text-container, centred inside stage */
+  #scene {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%;
+  }
+
+  /* canvas sfondo — fisicamente sotto il testo */
+  #bg-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  #text-container {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    padding: 20px 40px;
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .letter-wrapper {
+    display: inline-flex; align-items: flex-end;
+    position: relative; cursor: pointer;
+  }
+  .letter-wrapper:hover { outline: 1px dashed rgba(255,255,255,.35); outline-offset: 0; }
+  .letter-wrapper.selected { outline: 2px solid rgba(255,255,255,.9); outline-offset: 0; }
+
+  .letter-wrapper.break-after::after {
+    content: '↵';
+    position: absolute;
+    bottom: -16px;
+    right: 0;
+    font-size: 9px;
+    color: var(--accent);
+    pointer-events: none;
+  }
+
+  /* flex line break element */
+  .flex-break {
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .letter-char { display: block; line-height: 1; }
+
+  /* one flex row per line */
+  .row-line {
+    display: flex;
+    align-items: baseline;
+    width: 100%;
+  }
+
+  /* ── PANEL ── */
+  #panel {
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    flex-shrink: 0;
+    max-height: 290px;
+    overflow: hidden;
+  }
+
+  .p-left {
+    border-right: 1px solid var(--border);
+    padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 8px;
+    overflow-y: auto;
+  }
+  .p-right {
+    padding: 10px 14px;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+
+  .p-left::-webkit-scrollbar, .p-right::-webkit-scrollbar { width: 4px; }
+  .p-left::-webkit-scrollbar-track, .p-right::-webkit-scrollbar-track { background: #111; }
+  .p-left::-webkit-scrollbar-thumb, .p-right::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 2px; }
+
+  .ph { font-size: 9px; letter-spacing: .15em; text-transform: uppercase; color: #666; border-bottom: 1px solid var(--border); padding-bottom: 3px; }
+
+  #text-input {
+    background: #222; border: 1px solid #3a3a3a; border-radius: 3px;
+    color: #fff; font-size: 16px; font-weight: 700; padding: 5px 8px;
+    width: 100%; outline: none;
+  }
+  #text-input:focus { border-color: var(--accent); }
+
+  #letter-list { display: flex; flex-wrap: wrap; gap: 5px; }
+  .lbtn {
+    background: #252525; border: 1px solid #3a3a3a; border-radius: 3px;
+    color: #ccc; font-size: 12px; font-weight: 700;
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background .1s;
+  }
+  .lbtn:hover { background: #333; }
+  .lbtn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Controls */
+  .ctrl-group { display: flex; flex-direction: column; gap: 3px; }
+  .ctrl-group-title {
+    font-size: 9px; letter-spacing: .15em; text-transform: uppercase;
+    color: #555; margin-top: 6px; margin-bottom: 1px;
+  }
+
+  .ctrl-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ctrl-row label { font-size: 10px; color: #888; width: 110px; flex-shrink: 0; }
+  .ctrl-row input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; height: 3px; }
+  .ctrl-row input[type=color] { height: 22px; width: 36px; border: none; background: none; cursor: pointer; padding: 0; }
+  .ctrl-row .v { font-size: 10px; color: #ccc; width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  #axes-section { display: flex; flex-direction: column; gap: 3px; }
+  #axes-section .no-axes { font-size: 10px; color: #555; font-style: italic; }
+
+  /* Toggle switch — compact */
+  .toggle-switch { position: relative; display: inline-block; width: 28px; height: 15px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track {
+    position: absolute; inset: 0; background: #333; border-radius: 8px;
+    cursor: pointer; transition: background .2s;
+  }
+  .toggle-switch input:checked + .toggle-track { background: var(--accent); }
+  .toggle-thumb {
+    position: absolute; top: 2px; left: 2px;
+    width: 11px; height: 11px; background: #fff; border-radius: 50%;
+    transition: transform .2s;
+  }
+  .toggle-switch input:checked + .toggle-track .toggle-thumb { transform: translateX(13px); }
+
+  /* Align buttons */
+  .align-btns { display: flex; gap: 3px; }
+  .abtn {
+    background: #252525; border: 1px solid #3a3a3a; border-radius: 3px;
+    color: #888; font-size: 11px; width: 26px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background .1s, color .1s;
+    padding: 0;
+  }
+  .abtn:hover { background: #333; color: #fff; }
+  .abtn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>Type Chaos Tool</h1>
+
+  <!-- Font locale -->
+  <label id="font-load-btn">
+    ＋ Carica Font (.ttf/.otf/.woff2)
+    <input type="file" accept=".ttf,.otf,.woff,.woff2" id="font-file-input" style="display:none">
+  </label>
+  <span id="font-name-display" style="font-size:10px;color:#777;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Nessun font caricato</span>
+
+  <!-- BG -->
+  <div class="bg-switcher">
+    <div class="bg-swatch active" style="background:#e8392a" data-bg="default" title="Rosso"></div>
+    <div class="bg-swatch" style="background:#111" data-bg="dark" title="Nero"></div>
+    <div class="bg-swatch" style="background:#fff;border-color:#555" data-bg="white" title="Bianco"></div>
+  </div>
+
+  <div class="sel-info">Selezionato: <span id="sel-label">Tutto</span></div>
+
+  <button class="btn" id="btn-rand">⚡ Randomizza</button>
+  <button class="btn red" id="btn-reset">↺ Reset</button>
+  <div style="width:1px;background:#333;height:18px;"></div>
+  <div style="display:flex;gap:5px;align-items:center;">
+    <span style="font-size:9px;color:#555;letter-spacing:.1em;text-transform:uppercase;">Export</span>
+    <button class="btn" id="btn-export-png">PNG</button>
+    <button class="btn" id="btn-export-jpg">JPG</button>
+    <button class="btn" id="btn-export-svg">SVG</button>
+  </div>
+</div>
+
+<div id="stage">
+  <div id="scene">
+    <canvas id="bg-canvas"></canvas>
+    <div id="text-container"></div>
+  </div>
+</div>
+
+<div id="panel">
+  <!-- LEFT -->
+  <div class="p-left">
+    <span class="ph">Testo</span>
+    <input type="text" id="text-input" value="studio sale" maxlength="40" />
+
+    <span class="ph">Lettere</span>
+    <div id="letter-list"></div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="p-right">
+    <span class="ph">Controlli — <span id="ctrl-scope" style="color:var(--accent)">Tutto</span></span>
+
+    <div class="ctrl-group">
+      <span class="ctrl-group-title">Tipografia</span>
+      <div class="ctrl-row"><label>Dimensione (px)</label><input type="range" id="c-size" min="20" max="500" value="160" step="1"><span class="v" id="v-size">160</span></div>
+      <div class="ctrl-row">
+        <label>Allineamento</label>
+        <div class="align-btns" id="align-btns">
+          <button class="abtn active" data-align="left" title="Sinistra">⬅</button>
+          <button class="abtn" data-align="center" title="Centro">↔</button>
+          <button class="abtn" data-align="right" title="Destra">➡</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <span class="ctrl-group-title">Posizione</span>
+      <div class="ctrl-row"><label>Offset Y (px)</label><input type="range" id="c-y" min="-300" max="300" value="0" step="1"><span class="v" id="v-y">0</span></div>
+      <div class="ctrl-row"><label>Spacing destra (px)</label><input type="range" id="c-spacing" min="-80" max="100" value="0" step="1"><span class="v" id="v-spacing">0</span></div>
+      <div class="ctrl-row"><label>Interlinea (px)</label><input type="range" id="c-lineheight" min="-100" max="300" value="0" step="1"><span class="v" id="v-lineheight">0</span></div>
+      <div class="ctrl-row">
+        <label>A capo dopo</label>
+        <label class="toggle-switch"><input type="checkbox" id="c-break"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <span class="ctrl-group-title">Colore lettera</span>
+      <div class="ctrl-row"><label>Colore testo</label><input type="color" id="c-color" value="#111111"><span class="v" id="v-color">#111111</span></div>
+    </div>
+
+    <div class="ctrl-group">
+      <span class="ctrl-group-title">Sfondo lettera</span>
+      <div class="ctrl-row">
+        <label>Attivo</label>
+        <label class="toggle-switch"><input type="checkbox" id="c-bgactive"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>
+      </div>
+      <div class="ctrl-row"><label>Colore</label><input type="color" id="c-bgcolor" value="#e8c842"><span class="v" id="v-bgcolor">#e8c842</span></div>
+      <div class="ctrl-row"><label>Padding (px)</label><input type="range" id="c-bgpad" min="0" max="120" value="20" step="1"><span class="v" id="v-bgpad">20</span></div>
+    </div>
+
+    <!-- Variable font axes — generati dinamicamente -->
+    <div class="ctrl-group" id="axes-section">
+      <span class="ctrl-group-title">Assi Variable Font</span>
+      <span class="no-axes" id="axes-placeholder">Carica un variable font per vedere gli assi disponibili.</span>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ──────────────────────────────────────────
+// STATE
+// ──────────────────────────────────────────
+const DEFAULTS = () => ({
+  size: 160,
+  y: 0,
+  spacing: 0,
+  color: '#111111',
+  bgactive: false,
+  bgcolor:  '#e8c842',
+  bgpad:    20,
+  breakAfter: false,
+  align: 'left',
+  axes: {}
+});
+
+let globalLineHeight = 0; // extra gap between rows in px (0 = natural)
+
+let text = 'studio sale';
+let selectedIndex = null;
+let letterData = [];
+let currentFont = null;       // FontFace name caricata
+let detectedAxes = [];        // [{tag, name, min, max, default}]
+
+function initFromText(t) {
+  text = t;
+  const prevData = [...letterData];
+  letterData = [...t].map((c, i) => {
+    const prev = prevData[i];
+    return { char: c, ...(prev ? { ...prev, char: c } : DEFAULTS()) };
+  });
+  selectedIndex = null;
+  updateSelLabel();
+  render();
+  buildLetterList();
+  syncControls();
+}
+
+// ──────────────────────────────────────────
+// FONT LOADING + AXIS DETECTION
+// ──────────────────────────────────────────
+document.getElementById('font-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const statusEl = document.getElementById('font-name-display');
+  statusEl.textContent = 'Caricamento…';
+
+  try {
+    // Read file as ArrayBuffer first (needed for axis detection)
+    const arrayBuf = await readFileAsArrayBuffer(file);
+
+    // Also read as base64 DataURL for FontFace
+    const dataURL = await readFileAsDataURL(file);
+
+    const fontName = 'UserFont_' + Date.now();
+    const face = new FontFace(fontName, `url(${dataURL})`);
+    await face.load();
+    document.fonts.add(face);
+
+    // Inject @font-face in a style tag as fallback
+    injectFontFaceStyle(fontName, dataURL);
+
+    currentFont = fontName;
+    clearMetricsCache();
+    statusEl.style.color = '#5dba6a';
+    statusEl.textContent = '✓ ' + file.name.replace(/\.[^.]+$/, '');
+
+    // Detect variable axes
+    detectedAxes = await detectVariableAxes(arrayBuf);
+    buildAxesControls();
+
+    const axDefaults = {};
+    detectedAxes.forEach(ax => axDefaults[ax.tag] = ax.default);
+    letterData.forEach(d => {
+      d.axes = { ...axDefaults, ...d.axes };
+    });
+
+    render();
+    syncControls();
+  } catch (err) {
+    console.error(err);
+    document.getElementById('font-name-display').textContent = '⚠ Errore caricamento';
+    alert('Errore nel caricamento del font:\n' + err.message);
+  }
+});
+
+function readFileAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('FileReader (ArrayBuffer) fallito'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('FileReader (DataURL) fallito'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function injectFontFaceStyle(name, dataURL) {
+  // Remove previous injected style if any
+  const old = document.getElementById('injected-font-style');
+  if (old) old.remove();
+  const style = document.createElement('style');
+  style.id = 'injected-font-style';
+  style.textContent = `@font-face { font-family: '${name}'; src: url('${dataURL}'); font-weight: 1 999; }`;
+  document.head.appendChild(style);
+}
+
+// Parse variable axes from font binary using ArrayBuffer
+async function detectVariableAxes(buf) {
+  try {
+    const view = new DataView(buf);
+    const axes = [];
+
+    // Read SFNT header
+    const sfntVersion = view.getUint32(0);
+    let tableCount, tableOffset;
+
+    if (sfntVersion === 0x00010000 || sfntVersion === 0x4F54544F) {
+      tableCount = view.getUint16(4);
+      tableOffset = 12;
+    } else if (sfntVersion === 0x74746366) {
+      // TTC
+      return [];
+    } else {
+      return [];
+    }
+
+    // Find fvar table
+    let fvarOffset = null;
+    for (let i = 0; i < tableCount; i++) {
+      const off = tableOffset + i * 16;
+      const tag = String.fromCharCode(
+        view.getUint8(off), view.getUint8(off+1),
+        view.getUint8(off+2), view.getUint8(off+3)
+      );
+      if (tag === 'fvar') {
+        fvarOffset = view.getUint32(off + 8);
+        break;
+      }
+    }
+
+    if (fvarOffset === null) return [];
+
+    // Parse fvar
+    const axesOffset = view.getUint16(fvarOffset + 4);
+    const axisCount  = view.getUint16(fvarOffset + 8);
+    const axisSize   = view.getUint16(fvarOffset + 10);
+
+    const KNOWN = { wght:'Weight', wdth:'Width', ital:'Italic', slnt:'Slant', opsz:'Optical Size', GRAD:'Grade', XTRA:'Counter Width', XOPQ:'Thick Stroke', YOPQ:'Thin Stroke', YTUC:'Uppercase Height', YTLC:'Lowercase Height', YTDE:'Descender', YTAS:'Ascender' };
+
+    for (let i = 0; i < axisCount; i++) {
+      const base = fvarOffset + axesOffset + i * axisSize;
+      const tag = String.fromCharCode(
+        view.getUint8(base), view.getUint8(base+1),
+        view.getUint8(base+2), view.getUint8(base+3)
+      );
+      const min = view.getInt32(base + 4) / 65536;
+      const def = view.getInt32(base + 8) / 65536;
+      const max = view.getInt32(base + 12) / 65536;
+      axes.push({ tag, name: KNOWN[tag] || tag, min: Math.round(min), max: Math.round(max), default: Math.round(def) });
+    }
+
+    return axes;
+  } catch(e) {
+    console.warn('Axis detection failed:', e);
+    return [];
+  }
+}
+
+function buildAxesControls() {
+  const section = document.getElementById('axes-section');
+  // Remove old dynamic controls
+  section.querySelectorAll('.axis-ctrl').forEach(el => el.remove());
+  document.getElementById('axes-placeholder').style.display = detectedAxes.length ? 'none' : 'block';
+
+  detectedAxes.forEach(ax => {
+    const row = document.createElement('div');
+    row.className = 'ctrl-row axis-ctrl';
+    row.dataset.tag = ax.tag;
+
+    const label = document.createElement('label');
+    label.textContent = ax.name + ' (' + ax.tag + ')';
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = ax.min;
+    slider.max = ax.max;
+    slider.value = ax.default;
+    slider.step = ax.max - ax.min > 10 ? 1 : 0.01;
+    slider.id = 'c-ax-' + ax.tag;
+
+    const val = document.createElement('span');
+    val.className = 'v';
+    val.id = 'v-ax-' + ax.tag;
+    val.textContent = ax.default;
+
+    slider.addEventListener('input', () => {
+      const v = parseFloat(slider.value);
+      val.textContent = v;
+      applyToSelected(d => { if (!d.axes) d.axes = {}; d.axes[ax.tag] = v; });
+      render();
+    });
+
+    row.appendChild(label);
+    row.appendChild(slider);
+    row.appendChild(val);
+    section.appendChild(row);
+  });
+}
+
+function syncAxisControls(d) {
+  detectedAxes.forEach(ax => {
+    if (ax.tag === 'wght') return;
+    const s = document.getElementById('c-ax-' + ax.tag);
+    const v = document.getElementById('v-ax-' + ax.tag);
+    if (!s) return;
+    const val = d.axes?.[ax.tag] ?? ax.default;
+    s.value = val;
+    v.textContent = val;
+  });
+}
+
+// ──────────────────────────────────────────
+// FONT METRICS (canvas)
+// ──────────────────────────────────────────
+// Returns { topGap, bottomGap } in px — the empty space added by the browser
+// above the actual glyph (topGap) and below it (bottomGap) at the given fontSize.
+const _metricsCache = new Map();
+
+function getFontGaps(fontFamily, fontSize, fvs) {
+  const key = `${fontFamily}|${fontSize}|${fvs}`;
+  if (_metricsCache.has(key)) return _metricsCache.get(key);
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = fontSize * 2;
+  canvas.height = fontSize * 3;
+  const ctx = canvas.getContext('2d');
+
+  let fontStr = `${fontSize}px ${fontFamily}`;
+  ctx.font = fontStr;
+  if (fvs) {
+    // Canvas doesn't support font-variation-settings directly via ctx.font,
+    // but we can approximate using the CSS font API if available
+    try {
+      // Use FontFace metrics via measureText with approximation
+    } catch(e) {}
+  }
+
+  // Measure a tall capital to get real glyph bounds
+  const m = ctx.measureText('H');
+
+  // fontBoundingBox = full line-height box the browser allocates
+  // actualBoundingBox = tight box around the actual ink of 'H'
+  const lineBoxAscent  = m.fontBoundingBoxAscent  ?? m.actualBoundingBoxAscent;
+  const lineBoxDescent = m.fontBoundingBoxDescent ?? m.actualBoundingBoxDescent;
+  const glyphAscent    = m.actualBoundingBoxAscent;
+  const glyphDescent   = m.actualBoundingBoxDescent;
+
+  const topGap    = lineBoxAscent  - glyphAscent;   // space above glyph inside the line box
+  const bottomGap = lineBoxDescent - glyphDescent;  // space below glyph inside the line box
+
+  const result = {
+    topGap:    Math.max(0, topGap),
+    bottomGap: Math.max(0, bottomGap)
+  };
+  _metricsCache.set(key, result);
+  return result;
+}
+
+function clearMetricsCache() { _metricsCache.clear(); }
+const container = document.getElementById('text-container');
+const scene     = document.getElementById('scene');
+
+function buildFontVariationSettings(d) {
+  const parts = [];
+  if (currentFont && d.axes) {
+    Object.entries(d.axes).forEach(([tag, val]) => {
+      parts.push(`'${tag}' ${val}`);
+    });
+  }
+  return parts.join(', ');
+}
+
+function render() {
+  container.innerHTML = '';
+
+  // Split letterData into rows based on breakAfter
+  const rows = [];
+  let current = [];
+  letterData.forEach((d, i) => {
+    current.push({ d, i });
+    if (d.breakAfter) { rows.push(current); current = []; }
+  });
+  if (current.length) rows.push(current);
+
+  rows.forEach(row => {
+    const rowAlign = row[0]?.d.align || 'left';
+    const justifyMap = { left: 'flex-start', center: 'center', right: 'flex-end' };
+
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'row-line';
+    rowDiv.style.justifyContent = justifyMap[rowAlign] || 'flex-start';
+    rowDiv.style.marginBottom = globalLineHeight + 'px';
+
+    row.forEach(({ d, i }) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'letter-wrapper' + (selectedIndex === i ? ' selected' : '');
+      wrapper.style.marginRight = d.spacing + 'px';
+      wrapper.style.transform   = `translateY(${d.y}px)`;
+      wrapper.style.padding     = '0';
+      wrapper.dataset.index     = i;
+      if (d.breakAfter) wrapper.classList.add('break-after');
+
+      const span = document.createElement('span');
+      span.className    = 'letter-char';
+      span.textContent  = d.char === ' ' ? '\u00A0' : d.char;
+      span.style.fontSize   = d.size + 'px';
+      span.style.fontFamily = currentFont ? `'${currentFont}'` : 'Arial Black, sans-serif';
+      span.style.color      = d.color;
+
+      const fvs = buildFontVariationSettings(d);
+      if (fvs) span.style.fontVariationSettings = fvs;
+
+      wrapper.appendChild(span);
+      wrapper.addEventListener('click', () => selectLetter(i));
+      rowDiv.appendChild(wrapper);
+    });
+
+    container.appendChild(rowDiv);
+  });
+
+  // Draw background rects on canvas after layout is complete
+  requestAnimationFrame(drawBgCanvas);
+}
+
+// ──────────────────────────────────────────
+// BG CANVAS
+// ──────────────────────────────────────────
+const bgCanvas = document.getElementById('bg-canvas');
+
+function drawBgCanvas() {
+  const sceneEl = document.getElementById('scene');
+  const sr      = sceneEl.getBoundingClientRect();
+  const W       = Math.round(sr.width);
+  const H       = Math.round(sr.height);
+
+  bgCanvas.width  = W;
+  bgCanvas.height = H;
+  const ctx = bgCanvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  // Offscreen canvas for measuring actual glyph ink bounds
+  const mCvs = document.createElement('canvas');
+  mCvs.width  = 1;
+  mCvs.height = 1;
+  const mCtx = mCvs.getContext('2d');
+
+  container.querySelectorAll('.letter-wrapper').forEach(wrapper => {
+    const idx = parseInt(wrapper.dataset.index);
+    const d   = letterData[idx];
+    if (!d || !d.bgactive) return;
+
+    const span = wrapper.querySelector('.letter-char');
+    if (!span) return;
+
+    const char = d.char === ' ' ? 'M' : d.char; // use 'M' for spaces (invisible)
+    const fam  = currentFont ? `'${currentFont}'` : 'Arial Black, sans-serif';
+    const fvs  = buildFontVariationSettings(d);
+
+    // Measure actual ink bounding box of this glyph at this size
+    mCtx.font = `${d.size}px ${fam}`;
+    const m = mCtx.measureText(char);
+
+    // actualBoundingBox = tight around the ink of the glyph
+    const glyphH = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
+    const glyphW = m.actualBoundingBoxLeft !== undefined
+      ? m.actualBoundingBoxLeft + m.actualBoundingBoxRight
+      : m.width;
+
+    // Anchor: get the baseline position from the DOM span
+    // span top + actualBoundingBoxAscent = top of glyph ink
+    const spanRect   = span.getBoundingClientRect();
+    // Approximate baseline: span bottom minus descent space
+    // Better: span top + (span height - descent gap)
+    // Use measureText lineBox to find descent fraction
+    const lineAscent  = m.fontBoundingBoxAscent  ?? m.actualBoundingBoxAscent;
+    const lineDescent = m.fontBoundingBoxDescent ?? m.actualBoundingBoxDescent;
+    const lineH       = lineAscent + lineDescent;
+
+    // baseline Y relative to scene = spanRect.top + (lineAscent / lineH) * spanRect.height
+    const baselineY = spanRect.top - sr.top + (lineAscent / lineH) * spanRect.height;
+
+    // glyph ink top and bottom
+    const glyphTop    = baselineY - m.actualBoundingBoxAscent;
+    const glyphBottom = baselineY + m.actualBoundingBoxDescent;
+
+    // glyph ink left: spanRect.left relative to scene
+    const glyphLeft   = spanRect.left - sr.left;
+
+    // Center of glyph ink box
+    const cx = glyphLeft + spanRect.width / 2;
+    const cy = (glyphTop + glyphBottom) / 2;
+
+    const hw = spanRect.width  / 2 + d.bgpad;
+    const hh = (glyphBottom - glyphTop) / 2 + d.bgpad;
+
+    ctx.fillStyle = d.bgcolor;
+    ctx.fillRect(
+      Math.round(cx - hw),
+      Math.round(cy - hh),
+      Math.round(hw * 2),
+      Math.round(hh * 2)
+    );
+  });
+}
+
+// ──────────────────────────────────────────
+// LETTER LIST
+// ──────────────────────────────────────────
+function buildLetterList() {
+  const list = document.getElementById('letter-list');
+  list.innerHTML = '';
+
+  const all = document.createElement('div');
+  all.className = 'lbtn' + (selectedIndex === null ? ' active' : '');
+  all.textContent = '✦';
+  all.title = 'Tutte';
+  all.addEventListener('click', () => { selectedIndex = null; updateSelLabel(); syncControls(); buildLetterList(); render(); });
+  list.appendChild(all);
+
+  letterData.forEach((d, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'lbtn' + (selectedIndex === i ? ' active' : '');
+    btn.textContent = d.char === ' ' ? '␣' : d.char;
+    btn.addEventListener('click', () => selectLetter(i));
+    list.appendChild(btn);
+  });
+}
+
+function selectLetter(i) {
+  selectedIndex = i;
+  updateSelLabel();
+  syncControls();
+  buildLetterList();
+  render();
+}
+
+function updateSelLabel() {
+  const label = selectedIndex !== null
+    ? (letterData[selectedIndex].char === ' ' ? '␣' : `"${letterData[selectedIndex].char}" [${selectedIndex+1}]`)
+    : 'Tutto';
+  document.getElementById('sel-label').textContent = label;
+  document.getElementById('ctrl-scope').textContent = label;
+}
+
+// ──────────────────────────────────────────
+// CONTROLS BINDING
+// ──────────────────────────────────────────
+function applyToSelected(fn) {
+  if (selectedIndex !== null) {
+    fn(letterData[selectedIndex]);
+  } else {
+    letterData.forEach(fn);
+  }
+}
+
+function bindRange(id, prop, postfix = '') {
+  const s = document.getElementById('c-' + id);
+  const v = document.getElementById('v-' + id);
+  s.addEventListener('input', () => {
+    const val = parseFloat(s.value);
+    v.textContent = val + postfix;
+    applyToSelected(d => d[prop] = val);
+    render();
+  });
+}
+
+function bindColor(id, prop) {
+  const inp = document.getElementById('c-' + id);
+  const v = document.getElementById('v-' + id);
+  inp.addEventListener('input', () => {
+    v.textContent = inp.value;
+    applyToSelected(d => d[prop] = inp.value);
+    render();
+  });
+}
+
+bindRange('size', 'size');
+bindRange('y', 'y');
+bindRange('spacing', 'spacing');
+bindColor('color', 'color');
+bindColor('bgcolor', 'bgcolor');
+bindRange('bgpad', 'bgpad');
+
+// Interlinea (global)
+document.getElementById('c-lineheight').addEventListener('input', (e) => {
+  globalLineHeight = parseInt(e.target.value);
+  document.getElementById('v-lineheight').textContent = globalLineHeight;
+  render();
+});
+
+// Toggle sfondo
+document.getElementById('c-bgactive').addEventListener('change', (e) => {
+  applyToSelected(d => d.bgactive = e.target.checked);
+  render();
+});
+document.getElementById('align-btns').addEventListener('click', (e) => {
+  const btn = e.target.closest('.abtn');
+  if (!btn) return;
+  const align = btn.dataset.align;
+  applyToSelected(d => d.align = align);
+  // update active state
+  document.querySelectorAll('.abtn').forEach(b => b.classList.toggle('active', b.dataset.align === align));
+  render();
+});
+
+// Toggle a capo
+document.getElementById('c-break').addEventListener('change', (e) => {
+  if (selectedIndex !== null) letterData[selectedIndex].breakAfter = e.target.checked;
+  render();
+});
+
+function syncControls() {
+  const src = selectedIndex !== null ? letterData[selectedIndex] : (letterData[0] || DEFAULTS());
+  setS('size', src.size);
+  setS('y', src.y);
+  setS('spacing', src.spacing);
+  setC('color', src.color);
+  setC('bgcolor', src.bgcolor);
+  setS('bgpad', src.bgpad ?? 20);
+  setS('lineheight', globalLineHeight);
+
+  const tog = document.getElementById('c-bgactive');
+  if (tog) tog.checked = !!src.bgactive;
+
+  // align buttons
+  const align = src.align || 'left';
+  document.querySelectorAll('.abtn').forEach(b => b.classList.toggle('active', b.dataset.align === align));
+
+  // toggle break
+  const brk = document.getElementById('c-break');
+  if (brk) brk.checked = selectedIndex !== null ? !!letterData[selectedIndex].breakAfter : false;
+
+  syncAxisControls(src);
+}
+
+function setS(id, val, postfix = '') {
+  const s = document.getElementById('c-' + id);
+  const v = document.getElementById('v-' + id);
+  if (s) s.value = val;
+  if (v) v.textContent = val + postfix;
+}
+function setC(id, val) {
+  const inp = document.getElementById('c-' + id);
+  const v = document.getElementById('v-' + id);
+  if (inp) inp.value = val;
+  if (v) v.textContent = val;
+}
+
+// ──────────────────────────────────────────
+// TEXT INPUT
+// ──────────────────────────────────────────
+document.getElementById('text-input').addEventListener('input', (e) => {
+  initFromText(e.target.value || ' ');
+});
+
+// ──────────────────────────────────────────
+// BG STAGE
+// ──────────────────────────────────────────
+document.querySelectorAll('.bg-swatch').forEach(sw => {
+  sw.addEventListener('click', () => {
+    document.querySelectorAll('.bg-swatch').forEach(s => s.classList.remove('active'));
+    sw.classList.add('active');
+    const stage = document.getElementById('stage');
+    stage.className = '';
+    const bg = sw.dataset.bg;
+    if (bg === 'dark') stage.classList.add('dark-bg');
+    else if (bg === 'white') stage.classList.add('white-bg');
+  });
+});
+
+// ──────────────────────────────────────────
+// RANDOMIZE
+// ──────────────────────────────────────────
+document.getElementById('btn-rand').addEventListener('click', () => {
+  letterData.forEach(d => {
+    d.size    = rnd(60, 260);
+    d.y       = rnd(-120, 100);
+    d.spacing = rnd(-40, 50);
+    d.bgactive = Math.random() > 0.5;
+    d.bgpad   = rnd(4, 40);
+    detectedAxes.forEach(ax => {
+      d.axes[ax.tag] = rnd(ax.min, ax.max);
+    });
+  });
+  syncControls();
+  render();
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  const axDefaults = {};
+  detectedAxes.forEach(ax => axDefaults[ax.tag] = ax.default);
+  letterData.forEach(d => {
+    Object.assign(d, DEFAULTS());
+    d.axes = { ...axDefaults };
+  });
+  globalLineHeight = 0;
+  setS('lineheight', 0);
+  syncControls();
+  render();
+});
+
+// ──────────────────────────────────────────
+// UTILS
+// ──────────────────────────────────────────
+function rnd(min, max) { return Math.round(Math.random() * (max - min) + min); }
+
+// ──────────────────────────────────────────
+// EXPORT
+// ──────────────────────────────────────────
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function getStageBgColor() {
+  const stage = document.getElementById('stage');
+  if (stage.classList.contains('dark-bg'))  return '#111111';
+  if (stage.classList.contains('white-bg')) return '#ffffff';
+  return '#e8392a';
+}
+
+function escXML(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Collect letter render data from live DOM positions
+function collectRenderItems() {
+  const sceneRect = document.getElementById('scene').getBoundingClientRect();
+  const items = [];
+
+  container.querySelectorAll('.letter-wrapper').forEach(wrapper => {
+    const idx  = parseInt(wrapper.dataset.index);
+    const d    = letterData[idx];
+    if (!d) return;
+    const span = wrapper.querySelector('.letter-char');
+    if (!span) return;
+
+    const r = span.getBoundingClientRect();
+
+    // Precise baseline using canvas measureText
+    const cvs = document.createElement('canvas');
+    const ctx = cvs.getContext('2d');
+    const fam = currentFont ? `'${currentFont}'` : 'Arial Black, sans-serif';
+    const fvs = buildFontVariationSettings(d);
+    ctx.font = `${d.size}px ${fam}`;
+    const m = ctx.measureText(d.char === ' ' ? 'M' : d.char);
+
+    items.push({
+      char:    d.char === ' ' ? '\u00A0' : d.char,
+      color:   d.color,
+      size:    d.size,
+      fam,
+      fvs,
+      // position relative to scene
+      left:     r.left   - sceneRect.left,
+      top:      r.top    - sceneRect.top,
+      width:    r.width,
+      height:   r.height,
+      baseline: r.top - sceneRect.top + m.actualBoundingBoxAscent,
+    });
+  });
+
+  return items;
+}
+
+// ── RASTER EXPORT (PNG / JPG) ──
+// Disegna direttamente su canvas: prima lo sfondo (dal bgCanvas già pronto),
+// poi ogni lettera con ctx.fillText usando il font già caricato dal browser.
+async function exportRaster(format) {
+  const btn = document.getElementById('btn-export-' + format);
+  const origText = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  const prevSelected = selectedIndex;
+  selectedIndex = null;
+  render();
+  // Due frame per assicurarsi che il DOM e bgCanvas siano aggiornati
+  await new Promise(r => requestAnimationFrame(r));
+  await new Promise(r => requestAnimationFrame(r));
+
+  try {
+    const stage     = document.getElementById('stage');
+    const sceneEl   = document.getElementById('scene');
+    const stageRect = stage.getBoundingClientRect();
+    const sceneRect = sceneEl.getBoundingClientRect();
+    const W = Math.round(stageRect.width);
+    const H = Math.round(stageRect.height);
+    const SCALE = 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = W * SCALE;
+    canvas.height = H * SCALE;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(SCALE, SCALE);
+
+    // 1. Sfondo stage
+    ctx.fillStyle = getStageBgColor();
+    ctx.fillRect(0, 0, W, H);
+
+    // 2. Sfondo lettere — copia il bgCanvas già disegnato
+    //    Calcola l'offset del scene rispetto allo stage
+    const sceneOffX = sceneRect.left - stageRect.left;
+    const sceneOffY = sceneRect.top  - stageRect.top;
+    if (bgCanvas.width > 0 && bgCanvas.height > 0) {
+      ctx.drawImage(bgCanvas, sceneOffX, sceneOffY, bgCanvas.width, bgCanvas.height);
+    }
+
+    // 3. Testo — ridisegna ogni lettera nella sua posizione esatta
+    const fontFam = currentFont ? `'${currentFont}'` : 'Arial Black, sans-serif';
+
+    container.querySelectorAll('.letter-wrapper').forEach(wrapper => {
+      const idx = parseInt(wrapper.dataset.index);
+      const d   = letterData[idx];
+      if (!d || d.char === ' ') return;
+
+      const span = wrapper.querySelector('.letter-char');
+      if (!span) return;
+
+      const spanRect = span.getBoundingClientRect();
+
+      // Calcola baseline: usa measureText per trovare l'ascent reale
+      const mCvs = document.createElement('canvas');
+      const mCtx = mCvs.getContext('2d');
+      mCtx.font = `${d.size}px ${fontFam}`;
+      const m = mCtx.measureText(d.char);
+      const lineAscent  = m.fontBoundingBoxAscent  ?? m.actualBoundingBoxAscent;
+      const lineDescent = m.fontBoundingBoxDescent ?? m.actualBoundingBoxDescent;
+      const lineH = lineAscent + lineDescent;
+      const baselineY = spanRect.top - stageRect.top + (lineAscent / lineH) * spanRect.height;
+      const x = spanRect.left - stageRect.left;
+
+      ctx.fillStyle = d.color;
+      ctx.font = `${d.size}px ${fontFam}`;
+
+      // Applica font-variation-settings se supportato dal browser
+      const fvs = buildFontVariationSettings(d);
+      if (fvs) {
+        try { ctx.fontVariationSettings = fvs; } catch(e) {}
+      }
+
+      ctx.fillText(d.char, x, baselineY);
+    });
+
+    const mime    = format === 'jpg' ? 'image/jpeg' : 'image/png';
+    const quality = format === 'jpg' ? 0.95 : undefined;
+    canvas.toBlob(b => downloadBlob(b, `type-chaos.${format}`), mime, quality);
+
+  } catch (err) {
+    alert('Export fallito: ' + err.message);
+    console.error(err);
+  } finally {
+    selectedIndex = prevSelected;
+    render();
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
+}
+
+// ── SVG EXPORT ──
+// Embeds font as base64 + uses real DOM positions for <text> elements.
+// Opens correctly in Illustrator with live text.
+function exportSVG() {
+  const stage     = document.getElementById('stage');
+  const stageRect = stage.getBoundingClientRect();
+  const sceneRect = document.getElementById('scene').getBoundingClientRect();
+  const W = Math.round(stageRect.width);
+  const H = Math.round(stageRect.height);
+  const bgColor = getStageBgColor();
+
+  // Offset: scene might not start at (0,0) relative to stage
+  const ox = sceneRect.left - stageRect.left;
+  const oy = sceneRect.top  - stageRect.top;
+
+  const items = collectRenderItems();
+  if (items.length === 0) { alert('Nessun testo da esportare.'); return; }
+
+  const fontFamilyName = currentFont || 'Arial Black';
+
+  // Embed font
+  let fontEmbedCSS = '';
+  const injectedStyle = document.getElementById('injected-font-style');
+  if (injectedStyle) fontEmbedCSS = injectedStyle.textContent;
+
+  // Build bg rects — usa la stessa logica di drawBgCanvas
+  const bgRects = [];
+  container.querySelectorAll('.letter-wrapper').forEach(wrapper => {
+    const idx = parseInt(wrapper.dataset.index);
+    const d   = letterData[idx];
+    if (!d || !d.bgactive) return;
+    const span = wrapper.querySelector('.letter-char');
+    if (!span) return;
+
+    const sr2 = span.getBoundingClientRect();
+    const cx = sr2.left + sr2.width  / 2 - sceneRect.left + ox;
+    const cy = sr2.top  + sr2.height / 2 - sceneRect.top  + oy;
+    const hw = sr2.width  / 2 + (d.bgpad ?? 20);
+    const hh = sr2.height / 2 + (d.bgpad ?? 20);
+
+    bgRects.push(`  <rect x="${(cx-hw).toFixed(2)}" y="${(cy-hh).toFixed(2)}" width="${(hw*2).toFixed(2)}" height="${(hh*2).toFixed(2)}" fill="${d.bgcolor}"/>`);
+  });
+
+  const textEls = items.map(item => {
+    if (item.char === '\u00A0') return '';
+    const fvsAttr = item.fvs ? ` font-variation-settings="${escXML(item.fvs)}"` : '';
+    const x = (item.left + ox).toFixed(2);
+    const y = (item.baseline + oy).toFixed(2);
+    return `  <text x="${x}" y="${y}" font-family="'${escXML(fontFamilyName)}', Arial Black, sans-serif" font-size="${item.size}" fill="${item.color}"${fvsAttr}>${escXML(item.char)}</text>`;
+  }).filter(Boolean).join('\n');
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <defs><style>${fontEmbedCSS}</style></defs>
+  <rect width="${W}" height="${H}" fill="${bgColor}"/>
+${bgRects.join('\n')}
+${textEls}
+</svg>`;
+
+  downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), 'type-chaos.svg');
+}
+
+document.getElementById('btn-export-png').addEventListener('click', () => exportRaster('png'));
+document.getElementById('btn-export-jpg').addEventListener('click', () => exportRaster('jpg'));
+document.getElementById('btn-export-svg').addEventListener('click', exportSVG);
+
+// Redraw bg canvas if stage is resized
+new ResizeObserver(() => drawBgCanvas()).observe(document.getElementById('scene'));
+
+// ──────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────
+initFromText('studio sale');
+</script>
+</body>
+</html>
